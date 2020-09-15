@@ -1,0 +1,110 @@
+rosshutdown
+rosinit('localhost')
+ipaddress = 'localhost';
+tbot = turtlebot(ipaddress);
+
+% Create subscribers and publisher
+robot = rospublisher('cmd_vel') ;  %Velocities and movement
+colorImgSub = rossubscriber('/camera/rgb/image_raw', 'BufferSize', 5);
+handles.colorImgSub = receive(colorImgSub,3);   %Camera
+
+% Move Robot at specified velocity in X direction 
+velocity = 0.22;     % meters per second
+velmsg = rosmessage(robot);
+velmsg.Linear.X = velocity;
+send(robot,velmsg);
+
+%Follow Blue ball 
+blueBallParams.blueMax = 120;  % Maximum permissible deviation from pure blue
+blueBallParams.darkMin = 30;   % Minimum acceptable darkness value
+
+%Infinite loop to publish camera repeatedly
+%while (1)
+  latestImg = readImage(handles.colorImgSub);
+  [c,~,ball] = FindBlueBall(latestImg,blueBallParams);
+  [height,width] = size(latestImg);
+  [position,~] = FindBlueBall(latestImg,blueBallParams);
+ 
+% Parameters for ball position and size
+horizontalTolerance = 20;
+sizeGoal = 70;
+sizeTolerance = 5;
+ for i = 1:100
+    % Get latest image, ball postion, and ball size.
+    latestImg = getColorImage(tbot);
+    [height,width] = size(latestImg);
+    [position,ballSize] = FindBlueBall(latestImg,blueBallParams);
+    
+    % Initialize velocities to zero.
+    linearVel = 0; 
+    angularVel = 0;
+    
+    % Left and right controls
+    if isempty(position)
+        angularVel = 0.5;
+        linearVel = 0;
+    elseif (position(1) > (width/2)-horizontalTolerance)
+        angularVel = 0.2;
+    elseif (position(1) < (width/2)+horizontalTolerance)
+        angularVel = -0.2;
+    end
+    
+    % Forward and back control
+    if isempty(ballSize)
+        angularVel = 0.5;
+        linearVel = 0;
+    elseif ballSize > sizeGoal + sizeTolerance
+        linearVel = - 0.1;
+    elseif ballSize < sizeGoal - sizeTolerance
+        linearVel = 0.1;
+    end
+    
+    % Send velocity commands and wait for commands to send.
+    setVelocity(tbot,linearVel,angularVel)
+    pause(0.2)
+ end
+  % img = receive(colorImgSub);
+ % imshow(readImage(img))
+%end
+
+
+
+
+function [c, mag, ball1] = FindBlueBall(img, params)
+    
+    if isempty(img)
+        c = [];
+        mag = [];
+        return
+    end
+    
+    imSize = size(img);
+    
+    heightThresh = imSize(1)*0.5; % Pixel height as a function of image size
+    
+    % Isolate blue color by combining blue images and dark images together
+    blueImg = img(:,:,1)/2 + img(:,:,2)/2 - img(:,:,3)/2;
+    blueThresh = blueImg < params.blueMax;
+    darkIso = -img(:,:,1)/2 - img(:,:,2)/2 + 3*img(:,:,3) - 2*rgb2gray(img);
+    darkThresh = darkIso > params.darkMin;
+    ball1 = blueThresh & darkThresh;
+    
+    % Find contiguous regions in the filtered image
+    s = regionprops(ball1, {'Centroid','Area','EquivDiameter'});
+    
+    % If there are none, conclude that no ball exists in the image
+    if isempty(s)
+        c = [];
+        mag = [];
+    else
+        % Choose the region with the largest area as the ball
+        [~, id] = max([s.Area]);
+        c = s(id).Centroid;
+        mag = s(id).EquivDiameter/2;
+        % Threshold so we don't chase images over the horizon
+        if (c(2) < heightThresh) || (mag < imSize(1)/24)
+            c = [];
+            mag = [];
+        end
+    end
+end
