@@ -11,4 +11,4 @@ Required toolboxes to run matlab code:
 - ROS Toolbox
 - ROS Toolbox Support Package for Turtlebot-Based Robots 
 
-To install the last toolbox you must have all the toolbox before that one and run the code rosAddons on matlab command window 
+To install the last toolbox you must have all other toolbox mentioned and run the code rosAddons on matlab command window 
