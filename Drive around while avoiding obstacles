@@ -1,0 +1,84 @@
+%% Code for autonomous driving for 30 sec avoiding obstacles
+rosinit('localhost')
+laserSub = rossubscriber('/scan');
+[velPub, velMsg] = rospublisher('cmd_vel');
+
+% Controller VFH computes steering directions to avoid objects...
+% while trying to drive forward
+vfh = controllerVFH;
+vfh.UseLidarScan = true;
+vfh.DistanceLimits = [0.05 1];
+vfh.RobotRadius = 0.1;
+vfh.MinTurningRadius = 0.2;
+vfh.SafetyDistance = 0.1;
+
+targetDir = 0;
+
+%Drive for 30 sec and stop 
+while rate.TotalElapsedTime < 30
+
+	% Get laser scan data
+	laserScan = receive(laserSub);
+	ranges = double(laserScan.Ranges);
+	angles = double(laserScan.readScanAngles);
+ 
+	% Create a lidarScan object from the ranges and angles
+        scan = lidarScan(ranges,angles);
+        
+	% Call VFH object to computer steering direction
+	steerDir = vfh(scan, targetDir);  
+    
+	% Calculate velocities
+	if ~isnan(steerDir) % If steering direction is valid
+		desiredV = 0.2;
+		w = ComputeAngularVelocity(steerDir, 1);
+	else % Stop and search for valid direction
+		desiredV = 0.0;
+		w = 0.5;
+	end
+
+	% Assign and send velocity commands
+	velMsg.Linear.X = desiredV;
+	velMsg.Angular.Z = w;
+	velPub.send(velMsg);
+end
+
+
+function w = ComputeAngularVelocity(steeringDir, wMax)
+
+
+% Allow variable input arguments
+    if nargin == 1
+        wMax = inf;
+    end
+
+    validateattributes(steeringDir, {'double'},{'real'},...
+                       'ComputeAngularVelocity', 'STEERINGDIR', 1);
+    validateattributes(wMax, {'double'},{'real', 'positive'},...
+                       'ComputeAngularVelocity', 'WMAX', 2);
+
+    % Computing in robot's coordinate frame
+    curPose = [0 0 0];
+
+    % The following computation is similar to controllerPurePursuit
+    lookaheadPoint = [cos(steeringDir), sin(steeringDir)];
+    slope = atan2((lookaheadPoint(2) - curPose(2)), ...
+                  (lookaheadPoint(1) - curPose(1)));
+    alpha = angdiff(curPose(3), slope);
+
+    % Angular velocity command for a differential drive robot is
+    % equal to the desired curvature to be followed by the robot.
+
+    w = (2*sin(alpha));
+
+    % Pick a constant rotation when robot is facing in the opposite
+    % direction of the path
+    if abs(abs(alpha) - pi) < 1e-12
+        w = sign(w)*1;
+    end
+
+    if abs(w) > wMax
+        w = sign(w)*wMax;
+    end
+
+end
