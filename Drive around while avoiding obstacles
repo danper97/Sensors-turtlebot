@@ -1,84 +1,41 @@
-%% Code for autonomous driving for 30 sec avoiding obstacles
+%% Drive around for 20 sec while avoiding obstacles
+
+%Subscribers and publisher
+laser = rossubscriber('/scan');
+rosshutdown
 rosinit('localhost')
-laserSub = rossubscriber('/scan');
-[velPub, velMsg] = rospublisher('cmd_vel');
+robot = rospublisher('cmd_vel');
+velmsg = rosmessage(robot);
 
-% Controller VFH computes steering directions to avoid objects...
-% while trying to drive forward
-vfh = controllerVFH;
-vfh.UseLidarScan = true;
-vfh.DistanceLimits = [0.05 1];
-vfh.RobotRadius = 0.1;
-vfh.MinTurningRadius = 0.2;
-vfh.SafetyDistance = 0.1;
+% Recieve scan message
+scan = receive(laser,3);
 
-targetDir = 0;
+% Velocities and distances
+spinVelocity = 0.6;       % Angular velocity (rad/s)
+forwardVelocity = 0.1;    % Linear velocity (m/s)
+backwardVelocity = -0.02; % Linear velocity (reverse) (m/s)
+distanceThreshold = 0.6;  % Distance threshold (m) for turning
 
-%Drive for 30 sec and stop 
-while rate.TotalElapsedTime < 30
-
-	% Get laser scan data
-	laserScan = receive(laserSub);
-	ranges = double(laserScan.Ranges);
-	angles = double(laserScan.readScanAngles);
- 
-	% Create a lidarScan object from the ranges and angles
-        scan = lidarScan(ranges,angles);
-        
-	% Call VFH object to computer steering direction
-	steerDir = vfh(scan, targetDir);  
-    
-	% Calculate velocities
-	if ~isnan(steerDir) % If steering direction is valid
-		desiredV = 0.2;
-		w = ComputeAngularVelocity(steerDir, 1);
-	else % Stop and search for valid direction
-		desiredV = 0.0;
-		w = 0.5;
-	end
-
-	% Assign and send velocity commands
-	velMsg.Linear.X = desiredV;
-	velMsg.Angular.Z = w;
-	velPub.send(velMsg);
-end
-
-
-function w = ComputeAngularVelocity(steeringDir, wMax)
-
-
-% Allow variable input arguments
-    if nargin == 1
-        wMax = inf;
-    end
-
-    validateattributes(steeringDir, {'double'},{'real'},...
-                       'ComputeAngularVelocity', 'STEERINGDIR', 1);
-    validateattributes(wMax, {'double'},{'real', 'positive'},...
-                       'ComputeAngularVelocity', 'WMAX', 2);
-
-    % Computing in robot's coordinate frame
-    curPose = [0 0 0];
-
-    % The following computation is similar to controllerPurePursuit
-    lookaheadPoint = [cos(steeringDir), sin(steeringDir)];
-    slope = atan2((lookaheadPoint(2) - curPose(2)), ...
-                  (lookaheadPoint(1) - curPose(1)));
-    alpha = angdiff(curPose(3), slope);
-
-    % Angular velocity command for a differential drive robot is
-    % equal to the desired curvature to be followed by the robot.
-
-    w = (2*sin(alpha));
-
-    % Pick a constant rotation when robot is facing in the opposite
-    % direction of the path
-    if abs(abs(alpha) - pi) < 1e-12
-        w = sign(w)*1;
-    end
-
-    if abs(w) > wMax
-        w = sign(w)*wMax;
-    end
-
-end
+% Drive for 20 seconds 
+ tic;
+  while toc < 20
+      % Collect information from laser scan
+      scan = receive(laser);
+      data = readCartesian(scan);
+      x = data(:,1);
+      y = data(:,2);
+      % Compute distance of the closest obstacle
+      dist = sqrt(x.^2 + y.^2);
+      minDist = min(dist);     
+      % Command robot action
+      if minDist < distanceThreshold
+          % If close to obstacle, back up slightly and spin
+          velmsg.Angular.Z = spinVelocity;
+          velmsg.Linear.X = backwardVelocity;
+      else
+          % Continue on forward path
+          velmsg.Linear.X = forwardVelocity;
+          velmsg.Angular.Z = 0;
+      end   
+      send(robot,velmsg);
+  end
