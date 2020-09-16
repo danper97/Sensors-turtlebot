@@ -1,7 +1,7 @@
 %% Drive around for 20 sec while avoiding obstacles
 
 %Subscribers and publisher
-laser = rossubscriber('/scan');
+laser = rossubscriber('scan');
 rosshutdown
 rosinit('localhost')
 robot = rospublisher('cmd_vel');
