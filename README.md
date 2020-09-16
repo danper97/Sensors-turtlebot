@@ -9,4 +9,4 @@ Required toolboxes to run matlab code:
 - Robotics Systems Toolbox
 - Image Processing Toolbox
 - ROS Toolbox
-- ROS Toolbox Support Package for Turtlebot-BaseD Robots 
+- ROS Toolbox Support Package for Turtlebot-Based Robots 
