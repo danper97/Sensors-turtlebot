@@ -8,11 +8,6 @@ robot = rospublisher('cmd_vel') ;  %Velocities and movement
 colorImgSub = rossubscriber('/camera/rgb/image_raw', 'BufferSize', 5);
 handles.colorImgSub = receive(colorImgSub,3);   %Camera
 
-% Move Robot at specified velocity in X direction 
-velocity = 0.22;     % meters per second
-velmsg = rosmessage(robot);
-velmsg.Linear.X = velocity;
-send(robot,velmsg);
 
 %Follow Blue ball 
 blueBallParams.blueMax = 120;  % Maximum permissible deviation from pure blue
