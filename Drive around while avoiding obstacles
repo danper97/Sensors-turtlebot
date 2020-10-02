@@ -1,41 +1,38 @@
-%% Drive around for 20 sec while avoiding obstacles
+%% Drive while avoiding obstacles
 
 %Subscribers and publisher
-laser = rossubscriber('scan');
+
 rosshutdown
 rosinit('localhost')
 robot = rospublisher('cmd_vel');
+laser = rossubscriber('scan');
+colorImgSub = rossubscriber('/camera/rgb/image_raw', 'BufferSize', 5);
+handles.colorImgSub = receive(colorImgSub,3);   %Camera
 velmsg = rosmessage(robot);
 
-% Recieve scan message
-scan = receive(laser,3);
+% Drive 
 
-% Velocities and distances
-spinVelocity = 0.6;       % Angular velocity (rad/s)
-forwardVelocity = 0.1;    % Linear velocity (m/s)
-backwardVelocity = -0.02; % Linear velocity (reverse) (m/s)
-distanceThreshold = 0.6;  % Distance threshold (m) for turning
-
-% Drive for 20 seconds 
- tic;
-  while toc < 20
+  while (1)
       % Collect information from laser scan
-      scan = receive(laser);
+      distanceThreshold = 0.6;
+      scan = receive(laser,3);
       data = readCartesian(scan);
-      x = data(:,1);
-      y = data(:,2);
+      x = data(end,1);
+      y = data(end,2);
       % Compute distance of the closest obstacle
       dist = sqrt(x.^2 + y.^2);
       minDist = min(dist);     
       % Command robot action
       if minDist < distanceThreshold
           % If close to obstacle, back up slightly and spin
-          velmsg.Angular.Z = spinVelocity;
-          velmsg.Linear.X = backwardVelocity;
+          forwardVelocity = -.1;
+          spinVelocity=1.6;
       else
           % Continue on forward path
-          velmsg.Linear.X = forwardVelocity;
-          velmsg.Angular.Z = 0;
-      end   
+          forwardVelocity = .12;
+          spinVelocity = 0;
+      end
+      velmsg.Linear.X = forwardVelocity;
+      velmsg.Angular.Z = spinVelocity;
       send(robot,velmsg);
   end
