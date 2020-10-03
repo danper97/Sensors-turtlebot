@@ -41,17 +41,23 @@ while (1)
           linearVel = .12;
           angularVel = 0;
       end
-    elseif (position(1) > (width/2)-horizontalTolerance) & ballSize > sizeGoal + sizeTolerance
+      elseif (position(1) > (width/2)-horizontalTolerance)
         angularVel = 0.2;
-        linearVel = -0.1;
-    elseif (position(1) > (width/2)-horizontalTolerance) & ballSize < sizeGoal - sizeTolerance
+      elseif (position(1) < (width/2)-horizontalTolerance)
         angularVel = 0.2;
-        linearVel = 0.1;
-    elseif (position(1) < (width/2)+horizontalTolerance) & ballSize > sizeGoal + sizeTolerance
-        angularVel = -0.2;
+    end
+    
+    if isempty(position)
+      if minDist < distanceThreshold
+          linearVel = -.1;
+          angularVel = 1.6;
+           else
+          linearVel = .12;
+          angularVel = 0;
+      end
+      elseif ballSize > sizeGoal + sizeTolerance
         linearVel = -0.1;
-    elseif (position(1) < (width/2)+horizontalTolerance) & ballSize < sizeGoal - sizeTolerance
-        angularVel = -0.2;
+      elseif ballSize < sizeGoal - sizeTolerance
         linearVel = 0.1;
     end
     
