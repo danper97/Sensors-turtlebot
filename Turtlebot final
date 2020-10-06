@@ -1,4 +1,7 @@
+%% Turtlebot Following blueball while avoiding obstacles
+% Ensure previous ros connections are closed
 rosshutdown
+% Initiate communication with turtlebot
 rosinit ('localhost')
 ipaddress = 'localhost';
 tbot = turtlebot(ipaddress);
@@ -10,46 +13,56 @@ robot = rospublisher('cmd_vel');
 velmsg = rosmessage(robot);
 laser = rossubscriber('scan');
 
-% Parameters for ball position and size
+% Parameters for ball position and avoiding obstacles
 sizeGoal = 68517;
 distanceThreshold = 0.9;
 
+% Infinite loop to get constant values and drive until user stops it
 while (1)
+    %Recieve scan data 
     scan = receive(laser,3);
+    %Create x an y values 
     data = readCartesian(scan);
+    %Get the last value recorded by scan to calculate distance to turtlebot
     x = data(end,1);
     y = data(end,2);
     dist = sqrt(x.^2 + y.^2);
     minDist = min(dist);
-    % Get latest image, ball postion, and ball size.
+    
+    % Get latest image, and calculate its size
     latestImg = getColorImage(tbot);
     [height,width] = size(latestImg);
-    %[position,ballSize] = FindBlueBall(latestImg,blueBallParams);
-    figure(1)
+    figure (1)
     plot(scan);
+    % Parameters to ensure detect blue ball and dark the rest
     params.darkMin = 160;
-    params.blueMax = 120;  % Maximum permissible deviation from pure blue
+    params.blueMax = 120; 
     img = latestImg;
+    % Operation to convert to white all blue parts and convert to dark all
+    % the rest of the image 
     blueImg = img(:,:,1)/2 + img(:,:,2)/2 - img(:,:,3)/2;
     blueThresh = blueImg < params.blueMax;
     darkIso = -img(:,:,1)/2 - img(:,:,2)/2 + 3*img(:,:,3) - 2*rgb2gray(img);
     darkThresh = darkIso > params.darkMin;
     ball1 = blueThresh & darkThresh;
+    % Region props allows us to extract the values faster and more accurate
+    % But, when no blue ball was detected the code return error
 %     s = regionprops(ball1, {'Centroid','Area'});
+    %We will use imfindcircles to detect the blue ball that was converted to white and detect its position in the plane
+    %We add a minimum radius to ensure that other small blue parts are not
+    %detected
     Rmin = 50;
     Rmax = 1200;
     [center, radius] = imfindcircles(ball1,[Rmin Rmax],'ObjectPolarity','bright');
 %     position = s.Centroid;
 %     ballSize = s.Area;
+    %Obtain position and size
     position = center;
     ballSize = pi* (radius*radius);
-
-
-% Initialize velocities to zero.
-    linearVel = 0; 
-    angularVel = 0;
     
-    % Left and right controls
+    % The system will determine if it can detect a ball in the picture and  follow it.
+    %If no ball is detected the robot will move forward obtaining the laser ... 
+    %data and if it gets within the distance threshold it will rotate and avoid it 
     if isempty(position)
        if minDist < distanceThreshold
           linearVel = -.1;
@@ -66,7 +79,7 @@ while (1)
        angularVel = 0; 
     end
     
-    % Forward and back control
+    % Forward and backward controls to get close to the ball
     if isempty(ballSize)
        if minDist < distanceThreshold
           linearVel = -.1;
@@ -83,7 +96,8 @@ while (1)
         linearVel = 0; 
     end
     
-    % Send velocity commands and wait for commands to send.
+    % Send the velocity commands calculated and display constant video
+    % feedback from the robot
       velmsg.Linear.X = linearVel;
       velmsg.Angular.Z = angularVel;
       send(robot,velmsg);
@@ -92,6 +106,7 @@ while (1)
       imshow(readImage(imgc))
       
  end
+
 
 
 
