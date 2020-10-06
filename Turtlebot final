@@ -1,106 +1,98 @@
 rosshutdown
-rosinit('localhost')
+rosinit ('localhost')
 ipaddress = 'localhost';
 tbot = turtlebot(ipaddress);
 
-robot = rospublisher('cmd_vel') ;  %Velocities and movement
+
+% Create subscribers and publisher
 colorImgSub = rossubscriber('/camera/rgb/image_raw', 'BufferSize', 5);
-handles.colorImgSub = receive(colorImgSub,3); 
+robot = rospublisher('cmd_vel');
+velmsg = rosmessage(robot);
 laser = rossubscriber('scan');
 
-blueBallParams.blueMax = 120;  
-blueBallParams.darkMin = 30;   
+% Parameters for ball position and size
+sizeGoal = 68517;
+distanceThreshold = 0.9;
 
 while (1)
-  latestImg = readImage(handles.colorImgSub);
-  [c,~,ball] = FindBlueBall(latestImg,blueBallParams);
-  [height,width] = size(latestImg);
-  [position,~] = FindBlueBall(latestImg,blueBallParams);
-  distanceThreshold = 0.6;
-  scan = receive(laser,3);
-  data = readCartesian(scan);
-  x = data(end,1);
-  y = data(end,2);
-  dist = sqrt(x.^2 + y.^2);
-  minDist = min(dist); 
-  horizontalTolerance = 20;
-  sizeGoal = 70;
-  sizeTolerance = 5;
-  latestImg = getColorImage(tbot);
-  [height,width] = size(latestImg);
-  [position,ballSize] = FindBlueBall(latestImg,blueBallParams);
-  % img = receive(colorImgSub);
-  % imshow(readImage(img))
-    
-    
-    if isempty(position)
-      if minDist < distanceThreshold
-          linearVel = -.1;
-          angularVel = 1.6;
-      else
-          linearVel = .12;
-          angularVel = 0;
-      end
-      elseif (position(1) > (width/2)-horizontalTolerance)
-        angularVel = 0.2;
-      elseif (position(1) < (width/2)-horizontalTolerance)
-        angularVel = 0.2;
-    end
-    
-    if isempty(position)
-      if minDist < distanceThreshold
-          linearVel = -.1;
-          angularVel = 1.6;
-           else
-          linearVel = .12;
-          angularVel = 0;
-      end
-      elseif ballSize > sizeGoal + sizeTolerance
-        linearVel = -0.1;
-      elseif ballSize < sizeGoal - sizeTolerance
-        linearVel = 0.1;
-    end
-    
-    setVelocity(tbot,linearVel,angularVel)
-    pause(0.2)
-    end
-
-
-function [c, mag, ball1] = FindBlueBall(img, params)
-    
-    if isempty(img)
-        c = [];
-        mag = [];
-        return
-    end
-    
-    imSize = size(img);
-    
-    heightThresh = imSize(1)*0.5; % Pixel height as a function of image size
-    
-    % Isolate blue color by combining blue images and dark images together
+    scan = receive(laser,3);
+    data = readCartesian(scan);
+    x = data(end,1);
+    y = data(end,2);
+    dist = sqrt(x.^2 + y.^2);
+    minDist = min(dist);
+    % Get latest image, ball postion, and ball size.
+    latestImg = getColorImage(tbot);
+    [height,width] = size(latestImg);
+    %[position,ballSize] = FindBlueBall(latestImg,blueBallParams);
+    figure(1)
+    plot(scan);
+    params.darkMin = 160;
+    params.blueMax = 120;  % Maximum permissible deviation from pure blue
+    img = latestImg;
     blueImg = img(:,:,1)/2 + img(:,:,2)/2 - img(:,:,3)/2;
     blueThresh = blueImg < params.blueMax;
     darkIso = -img(:,:,1)/2 - img(:,:,2)/2 + 3*img(:,:,3) - 2*rgb2gray(img);
     darkThresh = darkIso > params.darkMin;
     ball1 = blueThresh & darkThresh;
+%     s = regionprops(ball1, {'Centroid','Area'});
+    Rmin = 50;
+    Rmax = 1200;
+    [center, radius] = imfindcircles(ball1,[Rmin Rmax],'ObjectPolarity','bright');
+%     position = s.Centroid;
+%     ballSize = s.Area;
+    position = center;
+    ballSize = pi* (radius*radius);
+
+
+% Initialize velocities to zero.
+    linearVel = 0; 
+    angularVel = 0;
     
-    % Find contiguous regions in the filtered image
-    s = regionprops(ball1, {'Centroid','Area','EquivDiameter'});
-    
-    % If there are none, conclude that no ball exists in the image
-    if isempty(s)
-        c = [];
-        mag = [];
-    else
-        % Choose the region with the largest area as the ball
-        [~, id] = max([s.Area]);
-        c = s(id).Centroid;
-        mag = s(id).EquivDiameter/2;
-        % Threshold so we don't chase images over the horizon
-        if (c(2) < heightThresh) || (mag < imSize(1)/24)
-            c = [];
-            mag = [];
-        end
+    % Left and right controls
+    if isempty(position)
+       if minDist < distanceThreshold
+          linearVel = -.1;
+          angularVel = 1.6;
+       else
+          linearVel = .12;
+          angularVel = 0;
+       end 
+    elseif (position(1) < (height/2))
+        angularVel = 0.1;
+    elseif (position(1) > (height/2))
+        angularVel = -0.1;
+    elseif (position(1) == (height/2))
+       angularVel = 0; 
     end
-end
+    
+    % Forward and back control
+    if isempty(ballSize)
+       if minDist < distanceThreshold
+          linearVel = -.1;
+          angularVel = 1.6;
+       else
+          linearVel = .12;
+          angularVel = 0;
+        end 
+    elseif ballSize > sizeGoal 
+        linearVel = - 0.1;
+    elseif ballSize < sizeGoal 
+        linearVel = 0.1;
+    elseif ballSize == sizeGoal 
+        linearVel = 0; 
+    end
+    
+    % Send velocity commands and wait for commands to send.
+      velmsg.Linear.X = linearVel;
+      velmsg.Angular.Z = angularVel;
+      send(robot,velmsg);
+      imgc = receive(colorImgSub);
+      figure(2)
+      imshow(readImage(imgc))
+      
+ end
+
+
+
+
