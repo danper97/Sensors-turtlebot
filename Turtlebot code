@@ -1,36 +1,38 @@
 rosshutdown
-rosinit('localhost')
+rosinit ('localhost')
 ipaddress = 'localhost';
 tbot = turtlebot(ipaddress);
 
 % Create subscribers and publisher
-robot = rospublisher('cmd_vel') ;  %Velocities and movement
+%robot = rospublisher('cmd_vel') ;  %Velocities and movement
 colorImgSub = rossubscriber('/camera/rgb/image_raw', 'BufferSize', 5);
-handles.colorImgSub = receive(colorImgSub,3);   %Camera
+robot = rospublisher('cmd_vel');
+velmsg = rosmessage(robot);
 
-
-%Follow Blue ball 
-blueBallParams.blueMax = 120;  % Maximum permissible deviation from pure blue
-blueBallParams.darkMin = 30;   % Minimum acceptable darkness value
-
-%Infinite loop to publish camera repeatedly
-%while (1)
-  latestImg = readImage(handles.colorImgSub);
-  [c,~,ball] = FindBlueBall(latestImg,blueBallParams);
-  [height,width] = size(latestImg);
-  [position,~] = FindBlueBall(latestImg,blueBallParams);
- 
 % Parameters for ball position and size
-horizontalTolerance = 20;
-sizeGoal = 70;
-sizeTolerance = 5;
- for i = 1:100
+sizeGoal = 68517;
+
+while (1)
     % Get latest image, ball postion, and ball size.
     latestImg = getColorImage(tbot);
     [height,width] = size(latestImg);
-    [position,ballSize] = FindBlueBall(latestImg,blueBallParams);
-    
-    % Initialize velocities to zero.
+    %[position,ballSize] = FindBlueBall(latestImg,blueBallParams);
+
+    params.darkMin = 180;
+    params.blueMax = 160;  % Maximum permissible deviation from pure blue
+    img = latestImg;
+    blueImg = img(:,:,1)/2 + img(:,:,2)/2 - img(:,:,3)/2;
+    blueThresh = blueImg < params.blueMax;
+    darkIso = -img(:,:,1)/2 - img(:,:,2)/2 + 3*img(:,:,3) - 2*rgb2gray(img);
+    darkThresh = darkIso > params.darkMin;
+    ball1 = blueThresh & darkThresh;
+    s = regionprops(ball1, {'Centroid','Area'});
+    position = s.Centroid;
+    ballSize = s.Area;
+
+
+
+% Initialize velocities to zero.
     linearVel = 0; 
     angularVel = 0;
     
@@ -38,68 +40,31 @@ sizeTolerance = 5;
     if isempty(position)
         angularVel = 0.5;
         linearVel = 0;
-    elseif (position(1) > (width/2)-horizontalTolerance)
+    elseif (position(1) < (height/2))
         angularVel = 0.2;
-    elseif (position(1) < (width/2)+horizontalTolerance)
+    elseif (position(1) > (height/2))
         angularVel = -0.2;
+    elseif (position(1) == (height/2))
+       angularVel = 0; 
     end
     
     % Forward and back control
     if isempty(ballSize)
         angularVel = 0.5;
         linearVel = 0;
-    elseif ballSize > sizeGoal + sizeTolerance
+    elseif ballSize > sizeGoal 
         linearVel = - 0.1;
-    elseif ballSize < sizeGoal - sizeTolerance
+    elseif ballSize < sizeGoal 
         linearVel = 0.1;
+    elseif ballSize == sizeGoal 
+        linearVel = 0; 
     end
     
     % Send velocity commands and wait for commands to send.
-    setVelocity(tbot,linearVel,angularVel)
-    pause(0.2)
+      velmsg.Linear.X = linearVel;
+      velmsg.Angular.Z = angularVel;
+      send(robot,velmsg);
  end
   % img = receive(colorImgSub);
  % imshow(readImage(img))
-%end
 
-
-
-
-function [c, mag, ball1] = FindBlueBall(img, params)
-    
-    if isempty(img)
-        c = [];
-        mag = [];
-        return
-    end
-    
-    imSize = size(img);
-    
-    heightThresh = imSize(1)*0.5; % Pixel height as a function of image size
-    
-    % Isolate blue color by combining blue images and dark images together
-    blueImg = img(:,:,1)/2 + img(:,:,2)/2 - img(:,:,3)/2;
-    blueThresh = blueImg < params.blueMax;
-    darkIso = -img(:,:,1)/2 - img(:,:,2)/2 + 3*img(:,:,3) - 2*rgb2gray(img);
-    darkThresh = darkIso > params.darkMin;
-    ball1 = blueThresh & darkThresh;
-    
-    % Find contiguous regions in the filtered image
-    s = regionprops(ball1, {'Centroid','Area','EquivDiameter'});
-    
-    % If there are none, conclude that no ball exists in the image
-    if isempty(s)
-        c = [];
-        mag = [];
-    else
-        % Choose the region with the largest area as the ball
-        [~, id] = max([s.Area]);
-        c = s(id).Centroid;
-        mag = s(id).EquivDiameter/2;
-        % Threshold so we don't chase images over the horizon
-        if (c(2) < heightThresh) || (mag < imSize(1)/24)
-            c = [];
-            mag = [];
-        end
-    end
-end
