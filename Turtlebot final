@@ -15,7 +15,8 @@ laser = rossubscriber('scan');
 
 % Parameters for ball position and avoiding obstacles
 sizeGoal = 68517;
-distanceThreshold = 0.9;
+%sizeGoal = 52929;
+distanceThreshold = 0.6;
 
 % Infinite loop to get constant values and drive until user stops it
 while (1)
@@ -66,7 +67,7 @@ while (1)
     if isempty(position)
        if minDist < distanceThreshold
           linearVel = -.1;
-          angularVel = 1.6;
+          angularVel = 1.2;
        else
           linearVel = .12;
           angularVel = 0;
@@ -83,7 +84,7 @@ while (1)
     if isempty(ballSize)
        if minDist < distanceThreshold
           linearVel = -.1;
-          angularVel = 1.6;
+          angularVel = 1.2;
        else
           linearVel = .12;
           angularVel = 0;
