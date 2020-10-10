@@ -13,3 +13,9 @@ Required toolboxes to run matlab code:
 - ROS Toolbox Support Package for Turtlebot-Based Robots 
 
 To install the last toolbox you must have all other toolbox mentioned and run the code rosAddons on matlab command window 
+
+# Environment 
+To run the environment you must copy the world and launch files to your world files. 
+The world files can be found on the catkin_ws folder. 
+The location of this folder is specified below 
+Catkin_ws < src < turtlwbot3_simulations < turtlebot3_gazebo < worlds 
